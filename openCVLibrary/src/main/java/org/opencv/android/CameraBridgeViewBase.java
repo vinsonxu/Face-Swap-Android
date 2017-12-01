@@ -3,6 +3,7 @@ package org.opencv.android;
 import java.util.List;
 
 import org.opencv.R;
+import org.opencv.core.Core;
 import org.opencv.core.Mat;
 import org.opencv.core.Size;
 
@@ -18,6 +19,8 @@ import android.util.AttributeSet;
 import android.util.Log;
 import android.view.SurfaceHolder;
 import android.view.SurfaceView;
+
+import static org.opencv.core.CvType.CV_8UC3;
 
 /**
  * This is a basic class, implementing the interaction with Camera and OpenCV library.
@@ -35,6 +38,7 @@ public abstract class CameraBridgeViewBase extends SurfaceView implements Surfac
 
     private int mState = STOPPED;
     private Bitmap mCacheBitmap;
+    private Mat  mFlipData;
     private CvCameraViewListener2 mListener;
     private boolean mSurfaceExist;
     private Object mSyncObject = new Object();
@@ -70,7 +74,7 @@ public abstract class CameraBridgeViewBase extends SurfaceView implements Surfac
         Log.d(TAG, "Attr count: " + Integer.valueOf(count));
 
         TypedArray styledAttrs = getContext().obtainStyledAttributes(attrs, R.styleable.CameraBridgeViewBase);
-        if (styledAttrs.getBoolean(R.styleable.CameraBridgeViewBase_show_fps, false))
+        if (styledAttrs.getBoolean(R.styleable.CameraBridgeViewBase_show_fps, true))
             enableFpsMeter();
 
         mCameraIndex = styledAttrs.getInt(R.styleable.CameraBridgeViewBase_camera_id, -1);
@@ -356,6 +360,7 @@ public abstract class CameraBridgeViewBase extends SurfaceView implements Surfac
     private void onEnterStartedState() {
         Log.d(TAG, "call onEnterStartedState");
         /* Connect camera */
+        Log.d(TAG,"width:" + getWidth() + "  height:"+getHeight());
         if (!connectCamera(getWidth(), getHeight())) {
             AlertDialog ad = new AlertDialog.Builder(getContext()).create();
             ad.setCancelable(false); // This blocks the 'BACK' button
@@ -375,6 +380,11 @@ public abstract class CameraBridgeViewBase extends SurfaceView implements Surfac
         disconnectCamera();
         if (mCacheBitmap != null) {
             mCacheBitmap.recycle();
+        }
+
+        if (mFlipData != null) {
+            mFlipData.release();
+            mFlipData = null;
         }
     }
 
@@ -396,7 +406,20 @@ public abstract class CameraBridgeViewBase extends SurfaceView implements Surfac
         boolean bmpValid = true;
         if (modified != null) {
             try {
-                Utils.matToBitmap(modified, mCacheBitmap);
+                if (mCameraIndex == CAMERA_ID_FRONT) {
+                    // 前置摄像头画面需要flip
+                    if (mFlipData == null) {
+                        mFlipData = new Mat(modified.rows(), modified.cols(), CV_8UC3);
+                    }
+
+                    Core.flip(modified, mFlipData, 1);
+                    Utils.matToBitmap(mFlipData, mCacheBitmap);
+
+                } else {
+                    Utils.matToBitmap(modified, mCacheBitmap);
+                }
+
+
             } catch(Exception e) {
                 Log.e(TAG, "Mat type: " + modified);
                 Log.e(TAG, "Bitmap type: " + mCacheBitmap.getWidth() + "*" + mCacheBitmap.getHeight());
@@ -453,6 +476,7 @@ public abstract class CameraBridgeViewBase extends SurfaceView implements Surfac
     protected void AllocateCache()
     {
         mCacheBitmap = Bitmap.createBitmap(mFrameWidth, mFrameHeight, Bitmap.Config.ARGB_8888);
+
     }
 
     public interface ListItemAccessor {
